@@ -17,7 +17,7 @@ async function deployVotingPlusfixtureNoVoterExceptOwner() {
 }
 
 /**
- * Fixture utilisée pour la phase de proposition
+ * Fixture
  * - ajouts de 4 voters
  * @returns
  */
@@ -31,6 +31,11 @@ async function deployVotingPlusfixtureWithVoters() {
   return { votingPlus, owner, voter1, voter2, voter3, voter4, simpleUser };
 }
 
+/**
+ * Fixture
+ * - statut de workflow Proposal
+ * @returns
+ */
 async function deployVotingPlusfixtureWithVotersProposalStatus() {
   const { votingPlus, owner, voter1, voter2, voter3, voter4, simpleUser } =
     await loadFixture(deployVotingPlusfixtureWithVoters);
@@ -54,6 +59,32 @@ async function deployVotingPlusfixtureWithVotersVotingStatus() {
   await votingPlus.connect(voter3).addProposal("Proposal Voter 3");
   await votingPlus.connect(voter4).addProposal("Proposal Voter 4");
   await votingPlus.nextWorkflowStatus();
+  await votingPlus.nextWorkflowStatus();
+  return { votingPlus, owner, voter1, voter2, voter3, voter4, simpleUser };
+}
+
+/**
+ * Fixture utilisée pour la phase de vote
+ * - ajouts de 4 voters
+ * - ajouts de 5 proposals
+ * - vote effectués
+ * @returns
+ */
+async function deployVotingPlusfixtureWithVotersVotingSessionEnded() {
+  const { votingPlus, owner, voter1, voter2, voter3, voter4, simpleUser } =
+    await loadFixture(deployVotingPlusfixtureWithVoters);
+  await votingPlus.nextWorkflowStatus();
+  await votingPlus.connect(voter1).addProposal("Proposal N°1 Voter 1");
+  await votingPlus.connect(voter1).addProposal("Proposal N°2 Voter 1");
+  await votingPlus.connect(voter2).addProposal("Proposal Voter 2");
+  await votingPlus.connect(voter3).addProposal("Proposal Voter 3");
+  await votingPlus.connect(voter4).addProposal("Proposal Voter 4");
+  await votingPlus.nextWorkflowStatus();
+  await votingPlus.nextWorkflowStatus();
+  await votingPlus.connect(voter1).setVote(0);
+  await votingPlus.connect(voter2).setVote(3);
+  await votingPlus.connect(voter3).setVote(4);
+  await votingPlus.connect(voter4).setVote(3);
   await votingPlus.nextWorkflowStatus();
   return { votingPlus, owner, voter1, voter2, voter3, voter4, simpleUser };
 }
@@ -83,6 +114,12 @@ describe("VotingPlus", function () {
         await loadFixture(deployVotingPlusfixtureNoVoterExceptOwner));
     });
 
+    it("only the owner can change the workflow state", async () => {
+      await expect(
+        votingPlus.connect(voter1).nextWorkflowStatus()
+      ).to.be.revertedWithCustomError(votingPlus, "OwnableUnauthorizedAccount");
+    });
+
     it("should emit WorkflowStatusChange and increase workflow status by 1", async () => {
       const previousStatus = await votingPlus.workflowStatus();
 
@@ -99,8 +136,6 @@ describe("VotingPlus", function () {
     beforeEach(async () => {
       ({ votingPlus, owner, voter1, voter2, voter3, voter4, simpleUser } =
         await loadFixture(deployVotingPlusfixtureNoVoterExceptOwner));
-      // Interesting but typescript error type
-      //Object.assign(this, await loadFixture(deployVotingPlusfixtureNoVoter));
     });
 
     it("should should add two voters check if thye have been add to the mapping", async () => {
@@ -180,23 +215,38 @@ describe("VotingPlus", function () {
     });
 
     it("should add 4 proposals and do not allow to vote to any proposal (wrong status and not be a voter)", async () => {
-      await votingPlus.connect(voter1).addProposal("Proposal N°1 Voter 1");
+      await expect(
+        votingPlus.connect(voter1).addProposal("Proposal N°1 Voter 1")
+      )
+        .to.emit(votingPlus, "ProposalRegistered")
+        .withArgs(0);
+
       let proposal = await votingPlus.getOneProposal(0);
       assert(proposal.description === "Proposal N°1 Voter 1");
 
-      await votingPlus.connect(voter1).addProposal("Proposal N°2 Voter 1");
+      await expect(
+        votingPlus.connect(voter1).addProposal("Proposal N°2 Voter 1")
+      )
+        .to.emit(votingPlus, "ProposalRegistered")
+        .withArgs(1);
       proposal = await votingPlus.getOneProposal(1);
       assert(proposal.description === "Proposal N°2 Voter 1");
 
-      await votingPlus.connect(voter2).addProposal("Proposal Voter 2");
+      await expect(votingPlus.connect(voter2).addProposal("Proposal Voter 2"))
+        .to.emit(votingPlus, "ProposalRegistered")
+        .withArgs(2);
       proposal = await votingPlus.getOneProposal(2);
       assert(proposal.description === "Proposal Voter 2");
 
-      await votingPlus.connect(voter3).addProposal("Proposal Voter 3");
+      await expect(votingPlus.connect(voter3).addProposal("Proposal Voter 3"))
+        .to.emit(votingPlus, "ProposalRegistered")
+        .withArgs(3);
       proposal = await votingPlus.getOneProposal(3);
       assert(proposal.description === "Proposal Voter 3");
 
-      await votingPlus.connect(voter4).addProposal("Proposal Voter 4");
+      await expect(votingPlus.connect(voter4).addProposal("Proposal Voter 4"))
+        .to.emit(votingPlus, "ProposalRegistered")
+        .withArgs(4);
       proposal = await votingPlus.getOneProposal(4);
       assert(proposal.description === "Proposal Voter 4");
 
@@ -252,10 +302,96 @@ describe("VotingPlus", function () {
       );
     });
 
-    it("should add vote", async () => {
-      //await votingPlus.connect(voter1).setVote(0);
+    it("should take votes from all user and check it's update their voter structure, check also if the proposals have the right voting count", async () => {
+      let Voter = await votingPlus.getVoter(voter1.address);
+      assert(Voter.hasVoted === false);
+      await expect(votingPlus.connect(voter1).setVote(0))
+        .to.emit(votingPlus, "Voted")
+        .withArgs(voter1.address, 0);
+
+      Voter = await votingPlus.getVoter(voter1.address);
+      assert(Voter.hasVoted === true);
+      assert(Voter.votedProposalId === 0n);
+
+      await expect(votingPlus.connect(voter2).setVote(3))
+        .to.emit(votingPlus, "Voted")
+        .withArgs(voter2.address, 3);
+      Voter = await votingPlus.getVoter(voter2.address);
+      assert(Voter.hasVoted === true);
+      assert(Voter.votedProposalId === 3n);
+
+      await expect(votingPlus.connect(voter3).setVote(4))
+        .to.emit(votingPlus, "Voted")
+        .withArgs(voter3.address, 4);
+      Voter = await votingPlus.getVoter(voter3.address);
+      assert(Voter.hasVoted === true);
+      assert(Voter.votedProposalId === 4n);
+
+      await expect(votingPlus.connect(voter4).setVote(3))
+        .to.emit(votingPlus, "Voted")
+        .withArgs(voter4.address, 3);
+      Voter = await votingPlus.getVoter(voter4.address);
+      assert(Voter.hasVoted === true);
+      assert(Voter.votedProposalId === 3n);
+
+      let Proposal = await votingPlus.getOneProposal(0);
+      assert(Proposal.voteCount === 1n);
+
+      Proposal = await votingPlus.getOneProposal(1);
+      assert(Proposal.voteCount === 0n);
+
+      Proposal = await votingPlus.getOneProposal(2);
+      assert(Proposal.voteCount === 0n);
+
+      Proposal = await votingPlus.getOneProposal(3);
+      assert(Proposal.voteCount === 2n);
+
+      Proposal = await votingPlus.getOneProposal(4);
+      assert(Proposal.voteCount === 1n);
+    });
+
+    it("should revert, the owner can not tally vote during vote session", async () => {
+      await expect(votingPlus.tallyDraw()).to.be.revertedWith(
+        "Current status is not voting session ended"
+      );
     });
   });
 
-  describe("Tally vote phase", async () => {});
+  describe("Tally vote phase", async () => {
+    beforeEach(async () => {
+      ({ votingPlus, owner, voter1, voter2, voter3, voter4, simpleUser } =
+        await loadFixture(deployVotingPlusfixtureWithVotersVotingSessionEnded));
+    });
+
+    it("should revert voter can no more voting in tally session", async () => {
+      await expect(votingPlus.connect(voter1).setVote(0)).to.be.revertedWith(
+        "Voting session havent started yet"
+      );
+    });
+
+    it("should revert only owner can tally the votes", async () => {
+      await expect(
+        votingPlus.connect(voter1).tallyDraw()
+      ).to.be.revertedWithCustomError(votingPlus, "OwnableUnauthorizedAccount");
+    });
+
+    it("should change workflow state, emit the workflow change status and define the winning proposal", async () => {
+      const previousStatus = await votingPlus.workflowStatus();
+      await expect(votingPlus.tallyDraw())
+        .to.emit(votingPlus, "WorkflowStatusChange")
+        .withArgs(previousStatus, previousStatus + 1n);
+
+      let proposalID = await votingPlus.winningProposalsID(0);
+      assert(proposalID === 3n);
+
+      proposalID = await votingPlus.connect(voter1).winningProposalsID(0);
+      assert(proposalID === 3n);
+
+      proposalID = await votingPlus.connect(simpleUser).winningProposalsID(0);
+      assert(proposalID === 3n);
+
+      const currentStatus = await votingPlus.workflowStatus();
+      assert(currentStatus === previousStatus + 1n);
+    });
+  });
 });

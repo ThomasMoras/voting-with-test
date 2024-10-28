@@ -4,7 +4,7 @@ pragma solidity ^0.8.27;
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract VotingPlus is Ownable {
-    uint[] winningProposalsID;
+    uint[] public winningProposalsID;
     Proposal[] winningProposals;
 
     struct Voter {
@@ -149,39 +149,39 @@ contract VotingPlus is Ownable {
         emit WorkflowStatusChange(old, workflowStatus);
     }
 
-    function tallyVotesDraw() external onlyOwner returns (uint[] memory) {
-        require(
-            workflowStatus == WorkflowStatus.VotingSessionEnded,
-            "Current status is not voting session ended"
-        );
-        uint highestCount;
-        uint nbWinners;
-        uint temp;
-        for (uint i = 0; i < proposalsArray.length; i++) {
-            if (proposalsArray[i].voteCount == highestCount) {
-                nbWinners++;
-            }
-            if (proposalsArray[i].voteCount > highestCount) {
-                highestCount = proposalsArray[i].voteCount;
-                nbWinners = 1;
-            }
-        }
-        uint[] memory winners = new uint[](nbWinners);
+    // function tallyVotesDraw() external onlyOwner returns (uint[] memory) {
+    //     require(
+    //         workflowStatus == WorkflowStatus.VotingSessionEnded,
+    //         "Current status is not voting session ended"
+    //     );
+    //     uint highestCount;
+    //     uint nbWinners;
+    //     uint temp;
+    //     for (uint i = 0; i < proposalsArray.length; i++) {
+    //         if (proposalsArray[i].voteCount == highestCount) {
+    //             nbWinners++;
+    //         }
+    //         if (proposalsArray[i].voteCount > highestCount) {
+    //             highestCount = proposalsArray[i].voteCount;
+    //             nbWinners = 1;
+    //         }
+    //     }
+    //     uint[] memory winners = new uint[](nbWinners);
 
-        for (uint h = 0; h < proposalsArray.length; h++) {
-            if (proposalsArray[h].voteCount == highestCount) {
-                winners[temp] = h;
-                temp++;
-            }
-        }
-        workflowStatus = WorkflowStatus.VotesTallied;
-        emit WorkflowStatusChange(
-            WorkflowStatus.VotingSessionEnded,
-            WorkflowStatus.VotesTallied
-        );
+    //     for (uint h = 0; h < proposalsArray.length; h++) {
+    //         if (proposalsArray[h].voteCount == highestCount) {
+    //             winners[temp] = h;
+    //             temp++;
+    //         }
+    //     }
+    //     workflowStatus = WorkflowStatus.VotesTallied;
+    //     emit WorkflowStatusChange(
+    //         WorkflowStatus.VotingSessionEnded,
+    //         WorkflowStatus.VotesTallied
+    //     );
 
-        return winners;
-    }
+    //     return winners;
+    // }
 
     // ou
     function tallyDraw() external onlyOwner {
