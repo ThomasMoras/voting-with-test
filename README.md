@@ -1,13 +1,15 @@
-# Sample Hardhat Project
+# Voting system including complet set of tests
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a Hardhat Ignition module that deploys that contract.
+Projet de Système de Vote Alyra, utilisant la version plus.
 
-Try running some of the following tasks:
+## Explications des tests
 
-```shell
-npx hardhat help
-npx hardhat test
-REPORT_GAS=true npx hardhat test
-npx hardhat node
-npx hardhat ignition deploy ./ignition/modules/Lock.ts
-```
+### Phase de registration =>"Registration phase"
+
+- Permet de tester le déploiement du contrat et donc la propriété de celui-ci par le owner
+- Pour des raisons pratiques, le owner est ajouter en tant que voter par défaut
+- Test du modifier onlyVoters sur la fonction getVoter
+- Test l'ajout de différents voters, ainsi que la suppression d'un voter
+- Test droit d'exécution des fonctions (addVoter, deleteVoter) sur le modifier onlyOwner
+
+

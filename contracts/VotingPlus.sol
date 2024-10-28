@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.8.28;
+pragma solidity ^0.8.27;
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract Voting is Ownable {
+contract VotingPlus is Ownable {
     uint[] winningProposalsID;
     Proposal[] winningProposals;
 
