@@ -123,22 +123,22 @@ contract VotingPlus is Ownable {
 
     // ::::::::::::: STATE ::::::::::::: //
 
-    modifier checkWorkflowStatus(uint _num) {
-        require(
-            workflowStatus == WorkflowStatus(uint(_num) - 1),
-            "bad workflowstatus"
-        );
-        require(_num != 5, "il faut lancer tally votes");
-        _;
-    }
+    // modifier checkWorkflowStatus(uint _num) {
+    //     require(
+    //         workflowStatus == WorkflowStatus(uint(_num) - 1),
+    //         "bad workflowstatus"
+    //     );
+    //     require(_num != 5, "il faut lancer tally votes");
+    //     _;
+    // }
 
-    function setWorkflowStatus(
-        uint _num
-    ) external checkWorkflowStatus(_num) onlyOwner {
-        WorkflowStatus old = workflowStatus;
-        workflowStatus = WorkflowStatus(_num);
-        emit WorkflowStatusChange(old, workflowStatus);
-    }
+    // function setWorkflowStatus(
+    //     uint _num
+    // ) external checkWorkflowStatus(_num) onlyOwner {
+    //     WorkflowStatus old = workflowStatus;
+    //     workflowStatus = WorkflowStatus(_num);
+    //     emit WorkflowStatusChange(old, workflowStatus);
+    // }
 
     //ou
 

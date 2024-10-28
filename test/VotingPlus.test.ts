@@ -4,7 +4,7 @@ import {
 } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { assert, expect } from "chai";
-import { ethers } from "hardhat";
+import { ethers, ignition } from "hardhat";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { VotingPlus } from "../typechain-types";
 
@@ -16,14 +16,45 @@ async function deployVotingPlusfixtureNoVoterExceptOwner() {
   return { votingPlus, owner, voter1, voter2, voter3, voter4, simpleUser };
 }
 
+/**
+ * Fixture utilisée pour la phase de proposition
+ * - ajouts de 4 voters
+ * @returns
+ */
 async function deployVotingPlusfixtureWithVoters() {
   const { votingPlus, owner, voter1, voter2, voter3, voter4, simpleUser } =
     await loadFixture(deployVotingPlusfixtureNoVoterExceptOwner);
-  // add voters
   await votingPlus.addVoter(voter1);
   await votingPlus.addVoter(voter2);
   await votingPlus.addVoter(voter3);
   await votingPlus.addVoter(voter4);
+  return { votingPlus, owner, voter1, voter2, voter3, voter4, simpleUser };
+}
+
+async function deployVotingPlusfixtureWithVotersProposalStatus() {
+  const { votingPlus, owner, voter1, voter2, voter3, voter4, simpleUser } =
+    await loadFixture(deployVotingPlusfixtureWithVoters);
+  await votingPlus.nextWorkflowStatus();
+  return { votingPlus, owner, voter1, voter2, voter3, voter4, simpleUser };
+}
+
+/**
+ * Fixture utilisée pour la phase de vote
+ * - ajouts de 4 voters
+ * - ajouts de 5 proposals
+ * @returns
+ */
+async function deployVotingPlusfixtureWithVotersVotingStatus() {
+  const { votingPlus, owner, voter1, voter2, voter3, voter4, simpleUser } =
+    await loadFixture(deployVotingPlusfixtureWithVoters);
+  await votingPlus.nextWorkflowStatus();
+  await votingPlus.connect(voter1).addProposal("Proposal N°1 Voter 1");
+  await votingPlus.connect(voter1).addProposal("Proposal N°2 Voter 1");
+  await votingPlus.connect(voter2).addProposal("Proposal Voter 2");
+  await votingPlus.connect(voter3).addProposal("Proposal Voter 3");
+  await votingPlus.connect(voter4).addProposal("Proposal Voter 4");
+  await votingPlus.nextWorkflowStatus();
+  await votingPlus.nextWorkflowStatus();
   return { votingPlus, owner, voter1, voter2, voter3, voter4, simpleUser };
 }
 
@@ -46,10 +77,29 @@ describe("VotingPlus", function () {
     });
   });
 
+  describe("Workflows global check", async () => {
+    beforeEach(async () => {
+      ({ votingPlus, owner, voter1, voter2, voter3, voter4, simpleUser } =
+        await loadFixture(deployVotingPlusfixtureNoVoterExceptOwner));
+    });
+
+    it("should emit WorkflowStatusChange and increase workflow status by 1", async () => {
+      const previousStatus = await votingPlus.workflowStatus();
+
+      await expect(votingPlus.nextWorkflowStatus())
+        .to.emit(votingPlus, "WorkflowStatusChange")
+        .withArgs(previousStatus, previousStatus + 1n);
+
+      const currentStatus = await votingPlus.workflowStatus();
+      assert(currentStatus === previousStatus + 1n);
+    });
+  });
+
   describe("Registration phase", async () => {
     beforeEach(async () => {
       ({ votingPlus, owner, voter1, voter2, voter3, voter4, simpleUser } =
         await loadFixture(deployVotingPlusfixtureNoVoterExceptOwner));
+      // Interesting but typescript error type
       //Object.assign(this, await loadFixture(deployVotingPlusfixtureNoVoter));
     });
 
@@ -99,7 +149,113 @@ describe("VotingPlus", function () {
       voter = await votingPlus.getVoter(voter1.address);
       assert(voter.isRegistered === false);
     });
+
+    it("should revert addProposal cause the current workflow status is not ProposalsRegistrationStarted", async () => {
+      await expect(votingPlus.addProposal("My Proposal")).to.be.revertedWith(
+        "Proposals are not allowed yet"
+      );
+    });
   });
 
-  describe("Registration phase", async () => {});
+  describe("Proposal phase", async () => {
+    beforeEach(async () => {
+      ({ votingPlus, owner, voter1, voter2, voter3, voter4, simpleUser } =
+        await loadFixture(deployVotingPlusfixtureWithVotersProposalStatus));
+    });
+    it("should be Proposal status", async () => {
+      const currentStatus = await votingPlus.workflowStatus();
+      assert(currentStatus === 1n);
+    });
+
+    it("should revert addProposal cause the user is not a voter", async () => {
+      await expect(
+        votingPlus.connect(simpleUser).addProposal("My Proposal")
+      ).to.be.revertedWith("You're not a voter");
+    });
+
+    it("should revert cause a proposal can not be empty", async () => {
+      await expect(
+        votingPlus.connect(voter1).addProposal("")
+      ).to.be.revertedWith("Vous ne pouvez pas ne rien proposer");
+    });
+
+    it("should add 4 proposals and do not allow to vote to any proposal (wrong status and not be a voter)", async () => {
+      await votingPlus.connect(voter1).addProposal("Proposal N°1 Voter 1");
+      let proposal = await votingPlus.getOneProposal(0);
+      assert(proposal.description === "Proposal N°1 Voter 1");
+
+      await votingPlus.connect(voter1).addProposal("Proposal N°2 Voter 1");
+      proposal = await votingPlus.getOneProposal(1);
+      assert(proposal.description === "Proposal N°2 Voter 1");
+
+      await votingPlus.connect(voter2).addProposal("Proposal Voter 2");
+      proposal = await votingPlus.getOneProposal(2);
+      assert(proposal.description === "Proposal Voter 2");
+
+      await votingPlus.connect(voter3).addProposal("Proposal Voter 3");
+      proposal = await votingPlus.getOneProposal(3);
+      assert(proposal.description === "Proposal Voter 3");
+
+      await votingPlus.connect(voter4).addProposal("Proposal Voter 4");
+      proposal = await votingPlus.getOneProposal(4);
+      assert(proposal.description === "Proposal Voter 4");
+
+      //TO DO : Tester le nombre de propositions soumis;
+
+      await expect(
+        votingPlus.connect(simpleUser).setVote(0)
+      ).to.be.revertedWith("You're not a voter");
+
+      await expect(votingPlus.connect(voter1).setVote(0)).to.be.revertedWith(
+        "Voting session havent started yet"
+      );
+      await votingPlus.nextWorkflowStatus();
+      await expect(votingPlus.connect(voter1).setVote(0)).to.be.revertedWith(
+        "Voting session havent started yet"
+      );
+    });
+  });
+
+  describe("Voting phase", async () => {
+    beforeEach(async () => {
+      ({ votingPlus, owner, voter1, voter2, voter3, voter4, simpleUser } =
+        await loadFixture(deployVotingPlusfixtureWithVotersVotingStatus));
+    });
+
+    it("should be Voting status", async () => {
+      const currentStatus = await votingPlus.workflowStatus();
+      assert(currentStatus === 3n);
+    });
+
+    it("should revert, can not add a proposal in VotingSessionStarted status", async () => {
+      await expect(
+        votingPlus.connect(voter1).addProposal("Ne marchera pas")
+      ).to.be.revertedWith("Proposals are not allowed yet");
+    });
+
+    it("should revert, the user is not a voter", async () => {
+      await expect(
+        votingPlus.connect(simpleUser).setVote(0)
+      ).to.be.revertedWith("You're not a voter");
+    });
+
+    it("should revert, the proposal does not exist", async () => {
+      await expect(votingPlus.connect(voter1).setVote(6)).to.be.revertedWith(
+        "Proposal not found"
+      );
+    });
+
+    it("should revert, the voter can only vote once", async () => {
+      await votingPlus.connect(voter1).setVote(0);
+      await expect(votingPlus.connect(voter1).setVote(1)).to.be.revertedWith(
+        "You have already voted"
+      );
+    });
+
+    it("should add vote", async () => {
+      //await votingPlus.connect(voter1).setVote(0);
+    });
+  });
+
+  describe("Tally vote phase", async () => {});
 });
